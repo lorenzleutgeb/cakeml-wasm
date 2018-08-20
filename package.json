@@ -1,0 +1,21 @@
+{
+  "name": "cakeml-wasm",
+  "description": "CakeML: WebAssembly Runtime",
+  "version": "0.0.1",
+  "author": "Lorenz Leugeb <lorenz@leutgeb.xyz>",
+  "private": true,
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/lorenzleutgeb/cakeml-wasm.git"
+  },
+  "scripts": {
+  },
+  "dependencies": {
+    "browserfs": "2.0.0"
+  },
+  "devDependencies": {
+    "webpack": "~4.16",
+    "ts-node": "~5.0.0",
+    "typescript": "~2.9.2"
+  }
+}
