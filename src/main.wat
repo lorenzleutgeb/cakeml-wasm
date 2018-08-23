@@ -64,16 +64,24 @@
                   )
                 )
                 ;; 1_1
+
+                ;; To kill everything:
+                (unreachable)
               )
               ;; 2_1
 
-              ;; To jump:
+              ;; To jump (where 2 is the target):
               (set_global $next (i32.const 2))
               (br $switch)
             )
             ;; 3_1
+
+            ;; Falling through is obvious.
           )
           ;; 3_2
+               
+          ;; To jump to the same location again:
+          (br $switch)
         )
         ;; default
       )
@@ -83,6 +91,7 @@
     )
     ;; loop
 
+    ;; TODO: Think about what to return.
     (i32.const 0)
   )
 )
