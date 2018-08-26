@@ -11,7 +11,8 @@
   (export "memory" (memory $0))
 
   ;; Analoguous to a program counter, this is used to dispatch.
-  (global $next (mut i32) (i32.const 0))
+  (global $lab (mut i32) (i32.const 0))
+  (global $seg (mut i32) (i32.const 0))
 
   ;; TODO: The number of regs should be guessed, depending on which
   ;; hardware we expect this code to be JITed to in the browser.
@@ -49,29 +50,33 @@
     (loop $loop
       (block $switch
         (block $default
-          (block $3_2
-            (block $3_1
-              (block $2_1
-                (block $1_1
-                  (br_table
-                    $1_1
-                    $2_1
-                    $3_1
-                    $3_2
-                    $default
-
-                    (get_global $next)
-                  )
+          (block
+            (block
+              (block
+                (block
+                  (br_table 0 1 2 3 4 5 (get_global $seg))
                 )
-                ;; 1_1
+                ;; 0
 
                 ;; To kill everything:
                 (unreachable)
+               
+                (block
+                  (block
+                    (block
+                      (br_table 0 1 2 (get_global $lab)
+                    )
+                    ;; 0 0
+                  )
+                  ;; 0 1
+                )
+                ;; 0 2
               )
-              ;; 2_1
+              ;; 1
 
               ;; To jump (where 2 is the target):
-              (set_global $next (i32.const 2))
+              (set_global $seg (i32.const 2))
+              (set_global $lab (i32.const 0))
               (br $switch)
             )
             ;; 3_1
