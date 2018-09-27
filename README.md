@@ -5,8 +5,7 @@ CakeML program compiled to WebAssembly in the browser.
 
 What it offers in particular is a basic harness that will
 take the WebAssembly module (obtained through CakeML) and
-link it with another WebAssembly module that implements
-the foreign functions that the CakeML basis library offers.
+instantiate it with links to a JS implementation of the FFI.
 
 ## Build Instructions
 
