@@ -13,7 +13,7 @@ const text = {
 }
 
 // Runs the wasm module and returns a promise.
-const run = (url, argv) => {
+const run = (url, argv, ffis) => {
     // This will be populated after instantiation.
     let instance = null
 
@@ -53,42 +53,51 @@ const run = (url, argv) => {
         return text.decoder.decode(ptr, len)
     }
 
-    return WebAssembly.instantiateStreaming(fetch(url), {
-        ffi: {
-            get_arg_count: wrap((a, b) => {
-                const dst = view(a.ptr, 2)
-                dst[0] = argc
-                dst[1] = argc / 256
-            }),
-            get_arg_length: wrap((a, b) => {
-                const buf = view(a.ptr, 2)
-                const i = buf[0] + (buf[1] * 256)
-                if (i >= argv.length) {
-                    console.error('Index for get_arg_length out of bounds.')
-                }
-                const res = argv[i].length
-                buf[0] = res
-                buf[1] = res / 256
-            }),
-            get_arg: wrap((a, b) => {
-                const buf = view(a.ptr, 2)
-                const i = buf[0] + (buf[1] * 256)
-                if (i >= argv.length) {
-                    console.error('Index for get_arg_length out of bounds.')
-                }
-                storeString(argv[i], a.ptr)
-            }),
-            // To open the file with name at fname (zero-terminated) as O_RDONLY
-            // b[0] = 1 indicates error
-            // b[0] = 0 indicates success
-            // The file descriptor, an i64, should be written to b[1].
-            open_in: wrap((fname, b) => {
-            })
-        }
-   }).then(results => {
+    // TODO: What about cake_clear and cake_exit which resolve to cml_exit? They are not foreign functions...
+
+    const ffiBasis = {
+        get_arg_count: wrap((a, b) => {
+            const dst = view(a.ptr, 2)
+            dst[0] = argc
+            dst[1] = argc / 256
+        }),
+        get_arg_length: wrap((a, b) => {
+            const buf = view(a.ptr, 2)
+            const i = buf[0] + (buf[1] * 256)
+            if (i >= argv.length) {
+                console.error('Index for get_arg_length out of bounds.')
+            }
+            const res = argv[i].length
+            buf[0] = res
+            buf[1] = res / 256
+        }),
+        get_arg: wrap((a, b) => {
+            const buf = view(a.ptr, 2)
+            const i = buf[0] + (buf[1] * 256)
+            if (i >= argv.length) {
+                console.error('Index for get_arg_length out of bounds.')
+            }
+            storeString(argv[i], a.ptr)
+        }),
+        // To open the file with name at fname (zero-terminated) as O_RDONLY
+        // b[0] = 1 indicates error
+        // b[0] = 0 indicates success
+        // The file descriptor, an i64, should be written to b[1].
+        open_in: wrap((fname, b) => { console.error('Foreign function "open_in" is not implemented.') }),
+        open_out: wrap((fname, b) => { console.error('Foreign function "open_out" is not implemented.') }),
+        write: wrap((a, b) => { console.error('Foreign function "write" is not implemented.') }),
+        close: wrap((a, b) => { console.error('Foreign function "close" is not implemented.') }),
+        exit: wrap((a, b) => { console.error('Foreign function "exit" is not implemented.') }),
+        // NOTE: This is the empty foreign function. It is assumed to do nothing but can be used for tracing/logging.
+        '': wrap((a, b) => { console.error('Foreign function "" (deliberately empty string) is not implemented.') }),
+    }
+
+    const ffiMerged = Object.assign(ffiBasis, ffis)
+
+    return WebAssembly.instantiateStreaming(fetch(url), { ffi: ffiMerged }).then(results => {
         instance = results.instance
         return instance.exports.main()
-   }).catch(console.error)
+    }).catch(console.error)
 }
 
 // Example invocation:
