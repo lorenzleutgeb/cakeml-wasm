@@ -98,7 +98,10 @@ const run = (url, argv, ffis) => {
         open_out: wrap((fname, b) => { console.error('Foreign function "open_out" is not implemented.') }),
         write: wrap((a, b) => { console.error('Foreign function "write" is not implemented.') }),
         close: wrap((a, b) => { console.error('Foreign function "close" is not implemented.') }),
-        exit: wrap((a, b) => { console.error('Foreign function "exit" is not implemented.') }),
+        exit: wrap((a, b) => {
+            console.error('GCNum:', gc.count, ', GCTime(ms):', gc.total)
+            // TODO: How to actually exit?
+        }),
         // NOTE: This is the empty foreign function. It is assumed to do nothing but can be used for tracing/logging.
         '': wrap((c, a) => {
             if (c.len == 0) {
