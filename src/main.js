@@ -13,7 +13,7 @@ const text = {
 }
 
 // Runs the wasm module and returns a promise.
-const run = (url, argv, ffis) => {
+const run = (url, argv, fs, ffis) => {
     // This will be populated after instantiation.
     let instance = null
 
@@ -23,34 +23,67 @@ const run = (url, argv, ffis) => {
 
     // Create an Uint8Array from memory once and keep this instance.
     let cachedArray = null
-    function memory() {
+    const array = (ptr, len) => {
         if (cachedArray === null || cachedArray.buffer !== instance.exports.memory.buffer) {
-            cachedArray = new Uint8Array(instance.exports.memory.buffer);
+            cachedArray = new Uint8Array(instance.exports.memory.buffer)
         }
-        return cachedArray;
+        if (ptr == undefined && len == undefined) {
+            return cachedArray
+        } else if (ptr != undefined) {
+            if (len == undefined) {
+                return cachedArray.subarray(ptr)
+            } else {
+                return cachedArray.subarray(ptr, ptr + len)
+            }
+        }
     }
 
-    // Helper to get a Uint8Array backed by wasm memory.
-    const view = (ptr, len) => memory().subarray(ptr, ptr + len)
+    // Create a DataView from memory once and keep this instance.
+    let cachedView = null
+    const view = () => {
+        if (cachedView === null || cachedView.buffer !== instance.exports.memory.buffer) {
+            cachedView = new DataView(instance.exports.memory.buffer)
+        }
+        return cachedView
+    }
+
+    // TODO: Improve this to work for up to Number.MAX_SAFE_INTEGER
+    const setUint64 = (ptr, value) => {
+        if (!Number.isSafeInteger(value)) {
+            throw 'Given value must be a safe integer!'
+        }
+        if (number > 0xFFFFFFFF) {
+            throw 'Given value must be below 2^32!'
+        }
+        view().setUint32(ptr, value)
+        view().setUint32(ptr + 4, 0)
+    }
+
+    // TODO: Improve this to work for up to Number.MAX_SAFE_INTEGER
+    const getUint64 = (ptr) => {
+        if (view().setUint43(ptr + 4, 0) !== 0) {
+            throw 'Value to read must be below 2^32!'
+        }
+        return view().getUint32(ptr, value)
+    }
 
     // TODO: Note that the length of the string, i.e. how much memory
     // is available for it is not considered, we might overwrite.
-    const storeString = (s, ptr) => {
+    const storeString = (ptr, s) => {
         const buf = text.encoder.encode(s)
         console.log(buf, s)
-        memory().set(buf, ptr)
+        array().set(buf, ptr)
         return {ptr, len: buf.byteLength}
     }
 
     // To decode a UTF-8 string from wasm memory where the length is known.
     const loadString = (ptr, len) => {
-        return text.decoder.decode(memory().subarray(ptr, ptr + len))
+        return text.decoder.decode(array(ptr, len))
     }
 
     // To decode a C-style NUL-terminated UTF-8 string from wasm memory.
     const loadNulString = (ptr) => {
-        const len = memory().subarray(ptr).indexOf(0)
-        return text.decoder.decode(ptr, len)
+        return loadString(ptr, array(ptr).indexOf(0))
     }
 
     // For keeping GC statistics.
@@ -67,37 +100,76 @@ const run = (url, argv, ffis) => {
     // TODO: What about cake_clear and cake_exit which resolve to cml_exit? They are not foreign functions...
 
     const ffiBasis = {
-        get_arg_count: wrap((a, b) => {
-            const dst = view(a.ptr, 2)
-            dst[0] = argc
-            dst[1] = argc / 256
+        get_arg_count: wrap((c, a) => {
+            view().setUint16(c.ptr, argc)
         }),
-        get_arg_length: wrap((a, b) => {
-            const buf = view(a.ptr, 2)
-            const i = buf[0] + (buf[1] * 256)
-            if (i >= argv.length) {
-                console.error('Index for get_arg_length out of bounds.')
+        get_arg_length: wrap((c, a) => {
+            view().setUint16(a.ptr, argv[view().getUint16(a.ptr)].length)
+        }),
+        get_arg: wrap((c, a) => {
+            storeString(a.ptr, argv[view().getUint16(a.ptr)])
+        }),
+        open_in: wrap((c, a) => {
+            const fname = loadNulString(c.ptr)
+            //const flags = O_RDONLY
+            try {
+                const fd = fs.openSync(fname, 'r')
+                view().setUint8(a.ptr, 0)
+                console.log('Successfully opened', fname)
+                setUint64(a.ptr + 1, fd)
+            } catch (e) {
+                console.error(e)
+                view().setUint8(a.ptr, 1)
             }
-            const res = argv[i].length
-            buf[0] = res
-            buf[1] = res / 256
         }),
-        get_arg: wrap((a, b) => {
-            const buf = view(a.ptr, 2)
-            const i = buf[0] + (buf[1] * 256)
-            if (i >= argv.length) {
-                console.error('Index for get_arg_length out of bounds.')
+        open_out: wrap((c, a) => {
+            const fname = loadNulString(c.ptr)
+            // The default mode for BrowserFS' fs.open is 0644, which we are also using in
+            // basis_ffi.c
+            // Directly reusing the constants as in the C code would be possible with
+            // https://github.com/jvilk/BrowserFS/issues/216
+            //const flags = O_RDWR | O_CREAT | O_TRUNC
+            //const mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH
+            //const flags = O_RDONLY
+            try {
+                const fd = fs.openSync(fname, 'w+')
+                view().setUint8(a.ptr, 0)
+                console.log('Successfully opened', fname)
+                setUint64(a.ptr + 1, fd)
+            } catch (e) {
+                console.error(e)
+                view().setUint8(a.ptr, 255)
             }
-            storeString(argv[i], a.ptr)
         }),
-        // To open the file with name at fname (zero-terminated) as O_RDONLY
-        // b[0] = 1 indicates error
-        // b[0] = 0 indicates success
-        // The file descriptor, an i64, should be written to b[1].
-        open_in: wrap((fname, b) => { console.error('Foreign function "open_in" is not implemented.') }),
-        open_out: wrap((fname, b) => { console.error('Foreign function "open_out" is not implemented.') }),
-        write: wrap((a, b) => { console.error('Foreign function "write" is not implemented.') }),
-        close: wrap((a, b) => { console.error('Foreign function "close" is not implemented.') }),
+        write: wrap((c, a) => {
+            const fd = getUint64(c.ptr)
+            const n = view().getUint16(a.ptr)
+            const off = view().getUint16(a.ptr + 2)
+            try {
+                // Should be the same as (fs, array(a.ptr + 4 + off, n))
+                // but using off and n as parameters directly.
+                const nw = fs.writeSync(fs, array(a.ptr + 4), off, n)
+                if (nw < 0) {
+                    view().setUint8(a.ptr, 1)
+                } else {
+                    view().setUint8(a.ptr, 0)
+                    view().setUint16(a.ptr + 1, nw)
+                }
+                view().setUint8(a.ptr, nw < 0 ? 1 : 0)
+            } catch (e) {
+                console.error(e)
+                view().setUint8(a.ptr, 1)
+            }
+        }),
+        close: wrap((c, a) => {
+            try {
+                fs.closeSync(getUint64(c.ptr))
+                view().setUint8(a.ptr, 0)
+            } catch (e) {
+                console.error(e)
+                view().setUint8(a.ptr, 1)
+            }
+        }),
         exit: wrap((a, b) => {
             console.error('GCNum:', gc.count, ', GCTime(ms):', gc.total)
             // TODO: How to actually exit?
