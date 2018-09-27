@@ -53,6 +53,17 @@ const run = (url, argv, ffis) => {
         return text.decoder.decode(ptr, len)
     }
 
+    // For keeping GC statistics.
+    const gc = {
+        in:    false,
+        has:   false,
+        count: 0,
+        total: 0,
+        t1:    undefined,
+        t2:    undefined,
+        last:  undefined
+    }
+
     // TODO: What about cake_clear and cake_exit which resolve to cml_exit? They are not foreign functions...
 
     const ffiBasis = {
@@ -89,7 +100,29 @@ const run = (url, argv, ffis) => {
         close: wrap((a, b) => { console.error('Foreign function "close" is not implemented.') }),
         exit: wrap((a, b) => { console.error('Foreign function "exit" is not implemented.') }),
         // NOTE: This is the empty foreign function. It is assumed to do nothing but can be used for tracing/logging.
-        '': wrap((a, b) => { console.error('Foreign function "" (deliberately empty string) is not implemented.') }),
+        '': wrap((c, a) => {
+            if (c.len == 0) {
+                if (gc.in) {
+                    gc.t2 = performance.now()
+                    gc.total += gc.t2 - gc.t1
+                    gc.count++
+                    gc.in = false
+                } else {
+                    gc.in = true
+                    gc.t1 = performance.now()
+                }
+            } else {
+                const info = loadString(c.ptr, c.len).padEnd(30)
+                const now = performance.now()
+                if (gc.has) {
+                    console.error(info, '---', now - gc.last, 'milliseconds')
+                } else {
+                    console.error(info)
+                }
+                gc.last = performance.now()
+                gc.has = true
+            }
+        })
     }
 
     const ffiMerged = Object.assign(ffiBasis, ffis)
