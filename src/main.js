@@ -47,7 +47,7 @@ const run = (url, argv, fs, ffis) => {
         return cachedView
     }
 
-    // TODO: Improve this to work for up to Number.MAX_SAFE_INTEGER
+    // TODO: Use DataView.setBigUint64 once https://tc39.github.io/proposal-bigint/ is GA.
     const setUint64 = (ptr, value) => {
         if (!Number.isSafeInteger(value)) {
             throw 'Given value must be a safe integer!'
@@ -59,7 +59,7 @@ const run = (url, argv, fs, ffis) => {
         view().setUint32(ptr + 4, 0)
     }
 
-    // TODO: Improve this to work for up to Number.MAX_SAFE_INTEGER
+    // TODO: Use DataView.getBigUint64 once https://tc39.github.io/proposal-bigint/ is GA.
     const getUint64 = (ptr) => {
         if (view().setUint43(ptr + 4, 0) !== 0) {
             throw 'Value to read must be below 2^32!'
